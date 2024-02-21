@@ -1,5 +1,7 @@
 package com.jagjava.s3.controller;
 
+import com.amazonaws.services.s3.AmazonS3;
+import com.jagjava.s3.repository.CustomerRepository;
 import com.jagjava.s3.service.MetaDataService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -7,15 +9,22 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/file-storage")
 public class FileStorageController {
     MetaDataService metaDataService;
 
-    public FileStorageController(MetaDataService metaDataService) {
+    AmazonS3 s3Client;
+    CustomerRepository customerRepository;
+
+    public FileStorageController(MetaDataService metaDataService, AmazonS3 s3Client, CustomerRepository customerRepository) {
         this.metaDataService = metaDataService;
+        this.s3Client = s3Client;
+        this.customerRepository = customerRepository;
     }
 
     @PostMapping("/upload")
@@ -23,5 +32,14 @@ public class FileStorageController {
         metaDataService.upload(file);
         return "Upload Successfully";
     }
+
+    @PostMapping("/directUpload")
+    public String directUpload() {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        byteArrayOutputStream.writeBytes(customerRepository.findAll().toString().getBytes());
+        s3Client.putObject("jagstorage", "customer" + UUID.randomUUID() + ".csv", String.valueOf(byteArrayOutputStream));
+        return "Upload Successfully";
+    }
+
 
 }
