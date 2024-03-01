@@ -11,4 +11,5 @@ import lombok.*;
 public class MailStructure {
     private String subject;
     private String body;
+    private String email;
 }

@@ -19,8 +19,6 @@ import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.Calendar;
-import java.util.Date;
 
 @RestController
 @RequestMapping("/file-storage")
@@ -47,12 +45,12 @@ public class FileStorageController {
 
 
     @PostMapping("/directSaveCsv")
-    public String directSaveCsv() throws IOException {
+    public String directSaveCsv(@RequestBody MailStructure mailStructure) throws IOException {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         OutputStreamWriter streamWriter = new OutputStreamWriter(stream, StandardCharsets.UTF_8);
         try (CSVWriter writer = buildCSVWriter(streamWriter)) {
             String url = "jdbc:mysql://localhost:3306/batchjob";
-            Connection con = DriverManager.getConnection(url, "root", "Password");
+            Connection con = DriverManager.getConnection(url, "root", "Password@1234");
             System.out.println("Connection established......");
             //Creating the Statement
             Statement stmt = con.createStatement();
@@ -69,30 +67,31 @@ public class FileStorageController {
             writer.writeNext(line1);
             String data[] = new String[8];
             while (rs.next()) {
-                data[0] = String.valueOf(rs.getInt("CUSTOMER_ID"));
-                data[1] = rs.getString("FIRST_NAME");
-                data[2] = rs.getString("LAST_NAME");
-                data[3] = rs.getString("EMAIL");
-                data[4] = rs.getString("GENDER");
-                data[5] = rs.getString("CONTACT");
-                data[6] = rs.getString("COUNTRY");
-                data[7] = rs.getString("DOB");
-
+                data[0] = String.valueOf(rs.getInt("customer_id"));
+                data[1] = rs.getString("contact");
+                data[2] = rs.getString("country");
+                data[3] = rs.getString("dob");
+                data[4] = rs.getString("email");
+                data[5] = rs.getString("first_name");
+                data[6] = rs.getString("gender");
+                data[7] = rs.getString("last_name");
                 writer.writeNext(data);
             }
             //Flushing data from writer to file
             writer.flush();
             ObjectMetadata meta = new ObjectMetadata();
             meta.setContentType("text/csv");
-            s3Client.putObject("mybuckettopractice", "cust - " + RandomStringUtils.randomAlphabetic(5) + ".csv", new ByteArrayInputStream(stream.toByteArray()), meta);
-            Calendar calendar = Calendar.getInstance();
-            calendar.add(Calendar.HOUR, 10);
-            calendar.setTime(new Date());
-
-            URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv", calendar.getTime(), HttpMethod.GET);
-
-            System.out.println("generated URL " + url1.toString());
-            return "Successfully saved";
+            String filename = "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv";
+            s3Client.putObject("s3storagerajesh", filename, new ByteArrayInputStream(stream.toByteArray()), meta);
+            java.util.Date expiration = new java.util.Date();
+            long expTimeMillis = expiration.getTime();
+            expTimeMillis += 1000 * 60 * 60;
+            expiration.setTime(expTimeMillis);
+            URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", filename, expiration, HttpMethod.GET);
+            mailStructure.setSubject("Download CSV file from below link");
+            mailStructure.setBody(String.valueOf(url1));
+            fileStorageService.sendMail(mailStructure.getEmail(), mailStructure);
+            return "Successfully saved into s3 and sent to email " + mailStructure.getEmail();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -101,19 +100,6 @@ public class FileStorageController {
 
     private CSVWriter buildCSVWriter(OutputStreamWriter streamWriter) {
         return new CSVWriter(streamWriter, ',', Character.MIN_VALUE, '"', System.lineSeparator());
-    }
-
-    @PostMapping(value = "/sendMail/{toEmail}")
-    public String sendMail(@PathVariable String toEmail, @RequestBody MailStructure mailStructure) {
-        Calendar calendar = Calendar.getInstance();
-        calendar.add(Calendar.HOUR, 10);
-        calendar.setTime(new Date());
-
-        URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv", calendar.getTime(), HttpMethod.GET);
-        mailStructure.setSubject("Download CSV file from below link");
-        mailStructure.setBody(String.valueOf(url1));
-        fileStorageService.sendMail(toEmail, mailStructure);
-        return "Mail Sent";
     }
 }
 
