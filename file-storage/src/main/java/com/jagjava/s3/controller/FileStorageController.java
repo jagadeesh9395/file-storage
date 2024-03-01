@@ -1,23 +1,26 @@
 package com.jagjava.s3.controller;
 
+import com.amazonaws.HttpMethod;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.jagjava.s3.entity.MailStructure;
 import com.jagjava.s3.repository.CustomerRepository;
+import com.jagjava.s3.service.FileStorageService;
 import com.jagjava.s3.service.MetaDataService;
 import com.opencsv.CSVWriter;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
+import java.util.Calendar;
+import java.util.Date;
 
 @RestController
 @RequestMapping("/file-storage")
@@ -27,10 +30,13 @@ public class FileStorageController {
     AmazonS3 s3Client;
     CustomerRepository customerRepository;
 
-    public FileStorageController(MetaDataService metaDataService, AmazonS3 s3Client, CustomerRepository customerRepository) {
+    FileStorageService fileStorageService;
+
+    public FileStorageController(MetaDataService metaDataService, AmazonS3 s3Client, CustomerRepository customerRepository, FileStorageService fileStorageService) {
         this.metaDataService = metaDataService;
         this.s3Client = s3Client;
         this.customerRepository = customerRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     @PostMapping("/upload")
@@ -78,9 +84,15 @@ public class FileStorageController {
             writer.flush();
             ObjectMetadata meta = new ObjectMetadata();
             meta.setContentType("text/csv");
-            s3Client.putObject("jagstorage", "cust - " + RandomStringUtils.randomAlphabetic(5) + ".csv", new ByteArrayInputStream(stream.toByteArray()), meta);
+            s3Client.putObject("mybuckettopractice", "cust - " + RandomStringUtils.randomAlphabetic(5) + ".csv", new ByteArrayInputStream(stream.toByteArray()), meta);
+            Calendar calendar = Calendar.getInstance();
+            calendar.add(Calendar.HOUR, 10);
+            calendar.setTime(new Date());
 
-            return "Sucessfully saved";
+            URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv", calendar.getTime(), HttpMethod.GET);
+
+            System.out.println("generated URL " + url1.toString());
+            return "Successfully saved";
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -89,6 +101,19 @@ public class FileStorageController {
 
     private CSVWriter buildCSVWriter(OutputStreamWriter streamWriter) {
         return new CSVWriter(streamWriter, ',', Character.MIN_VALUE, '"', System.lineSeparator());
+    }
+
+    @PostMapping(value = "/sendMail/{toEmail}")
+    public String sendMail(@PathVariable String toEmail, @RequestBody MailStructure mailStructure) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.add(Calendar.HOUR, 10);
+        calendar.setTime(new Date());
+
+        URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv", calendar.getTime(), HttpMethod.GET);
+        mailStructure.setSubject("Download CSV file from below link");
+        mailStructure.setBody(String.valueOf(url1));
+        fileStorageService.sendMail(toEmail, mailStructure);
+        return "Mail Sent";
     }
 }
 
