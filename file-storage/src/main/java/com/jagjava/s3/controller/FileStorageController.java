@@ -9,6 +9,9 @@ import com.jagjava.s3.service.FileStorageService;
 import com.jagjava.s3.service.MetaDataService;
 import com.opencsv.CSVWriter;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,6 +26,17 @@ import java.sql.*;
 @RestController
 @RequestMapping("/file-storage")
 public class FileStorageController {
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(FileStorageController.class);
+    @Value("${spring.datasource.url}")
+    String dbUrl;
+
+    @Value("${spring.datasource.username}")
+    String dbUser;
+    @Value("${spring.datasource.password}")
+    String dbPass;
+
+    @Value("${aws.s3.bucket}")
+    String awsBucketName;
     MetaDataService metaDataService;
 
     AmazonS3 s3Client;
@@ -49,9 +63,8 @@ public class FileStorageController {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         OutputStreamWriter streamWriter = new OutputStreamWriter(stream, StandardCharsets.UTF_8);
         try (CSVWriter writer = buildCSVWriter(streamWriter)) {
-            String url = "jdbc:mysql://localhost:3306/batchjob";
-            Connection con = DriverManager.getConnection(url, "root", "Password@1234");
-            System.out.println("Connection established......");
+            Connection con = DriverManager.getConnection(dbUrl, dbUser, dbPass);
+            log.info("Connection established......");
             //Creating the Statement
             Statement stmt = con.createStatement();
             //Query to retrieve records
@@ -60,12 +73,12 @@ public class FileStorageController {
             stmt.executeQuery(query);
             ResultSet rs = stmt.executeQuery(query);
             //Instantiating the CSVWriter class
-            ResultSetMetaData Mdata = rs.getMetaData();
-            Mdata.getColumnName(1);
+            ResultSetMetaData rsMetaData = rs.getMetaData();
+            rsMetaData.getColumnName(1);
             //Writing data to a csv file
-            String line1[] = {Mdata.getColumnName(1), Mdata.getColumnName(2), Mdata.getColumnName(3), Mdata.getColumnName(4), Mdata.getColumnName(5), Mdata.getColumnName(6), Mdata.getColumnName(7), Mdata.getColumnName(8)};
+            String[] line1 = {rsMetaData.getColumnName(1), rsMetaData.getColumnName(2), rsMetaData.getColumnName(3), rsMetaData.getColumnName(4), rsMetaData.getColumnName(5), rsMetaData.getColumnName(6), rsMetaData.getColumnName(7), rsMetaData.getColumnName(8)};
             writer.writeNext(line1);
-            String data[] = new String[8];
+            String[] data = new String[8];
             while (rs.next()) {
                 data[0] = String.valueOf(rs.getInt("customer_id"));
                 data[1] = rs.getString("contact");
@@ -82,12 +95,12 @@ public class FileStorageController {
             ObjectMetadata meta = new ObjectMetadata();
             meta.setContentType("text/csv");
             String filename = "cust - " + RandomStringUtils.randomAlphabetic(5).toLowerCase() + ".csv";
-            s3Client.putObject("s3storagerajesh", filename, new ByteArrayInputStream(stream.toByteArray()), meta);
+            s3Client.putObject(awsBucketName, filename, new ByteArrayInputStream(stream.toByteArray()), meta);
             java.util.Date expiration = new java.util.Date();
             long expTimeMillis = expiration.getTime();
             expTimeMillis += 1000 * 60 * 60;
             expiration.setTime(expTimeMillis);
-            URL url1 = s3Client.generatePresignedUrl("s3storagerajesh", filename, expiration, HttpMethod.GET);
+            URL url1 = s3Client.generatePresignedUrl(awsBucketName, filename, expiration, HttpMethod.GET);
             mailStructure.setSubject("Download CSV file from below link");
             mailStructure.setBody(String.valueOf(url1));
             fileStorageService.sendMail(mailStructure.getEmail(), mailStructure);
@@ -102,6 +115,3 @@ public class FileStorageController {
         return new CSVWriter(streamWriter, ',', Character.MIN_VALUE, '"', System.lineSeparator());
     }
 }
-
-
-

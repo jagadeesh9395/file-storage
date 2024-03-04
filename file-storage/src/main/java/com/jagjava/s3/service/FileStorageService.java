@@ -12,7 +12,6 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
-import java.text.MessageFormat;
 import java.util.Map;
 import java.util.Optional;
 
@@ -55,7 +54,6 @@ public class FileStorageService {
         mailMessage.setText(mailStructure.getBody());
         mailMessage.setTo(toMail);
         mailSender.send(mailMessage);
-        log.info(MessageFormat.format("Sending mail to {0} with message {1}", toMail, mailStructure.getBody()));
+        log.info("Sending mail to {} with message {}", toMail, mailStructure.getBody());
     }
-
 }
